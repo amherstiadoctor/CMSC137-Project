@@ -1,249 +1,171 @@
-# import needed modules
-import os, pickle, socket, struct, sys
+from _thread import start_new_thread
+import random
+import socket
+import pickle
+import time
 
-# initialize required variables
-CARDS = []
-isWIN = False
-isEND = False
+address = input("Enter IPv4 address: ")
+n_players = int(input("Enter number of players [3-13]: "))
+
+suits = ['C', 'D', 'H', 'S']
+ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']
+
+rank_lookup = {}
+for i in range(n_players):
+    rank_lookup[ranks[i]] = i
+
 
 class Card:
-	def __init__(self,card):
-		if(len(card) > 2):
-			self.value = card[0:2]
-			self.suit = card[2]
-		else:
-			self.value = card[0]
-			self.suit = card[1]
+    def __init__(self, rank, suit):
+        self.rank = rank
+        self.suit = suit
 
-		if(self.value == "1"):
-			self.value = "A"
-		elif(self.value == "11"):
-			self.value = "J"
-		elif(self.value == "12"):
-			self.value = "Q"
-		elif(self.value == "13"):
-			self.value = "K"
+    def __repr__(self):
+        return "".join((self.rank, self.suit))
 
-		if(self.suit == "C"):
-			self.suit = '\N{BLACK CLUB SUIT}'
-		elif(self.suit == "S"):
-			self.suit = '\N{BLACK SPADE SUIT}'
-		elif(self.suit == "H"):
-			self.suit = '\N{BLACK HEART SUIT}'
-		else:
-			self.suit = '\N{BLACK DIAMOND SUIT}'
+
+class Deck:
+    def __init__(self):
+        self.cards = [Card(r, s) for r in rank_lookup for s in suits]
+
+    def shuffle(self):
+        if len(self.cards) > 0:
+            random.shuffle(self.cards)
+
+    def deal(self):
+        if len(self.cards) > 0:
+            return self.cards.pop(0)
+
+
+class Player:
+    def __init__(self, player_id):
+        self.player_id = player_id
+        self.cards = []
+
+    def add_card(self, card):
+        return self.cards.append(str(card))
+
+    def pass_card(self, card_no):
+        return self.cards.pop(card_no)
+
+    def show_cards(self):
+        print("Player", self.player_id + 1, "cards:", end=" ")
+        for card in self.cards:
+            print(card, end=" ")
+        print()
+
+    def win(self):
+        return all(str(x)[0] == str(self.cards[0])[0] for x in self.cards)
+
 
 class Game:
-	def main(self):
-		menu_loop = True
-		while menu_loop:
-			print("\n -----------------------------------------------------------\n                     1-2-3 Pass Game\n Menu: \n ")
-			print(" [1] Connect to a server \n [2] Tutorial Game \n [3] Instructions/Controls \n [4] About the Game \n [5] Exit \n")
-			menu_option = input('\n >>> Enter: ')
-			print('\n -----------------------------------------------------------')
+    def __init__(self, max_players):
+        self.deck = Deck()
+        self.max_players = max_players
+        self.players = [Player(p_no) for p_no in range(self.max_players)]
+        self.pass_count = 0
+        self.winner = -1
+        self.table_count = 0
 
-			if menu_option == '1':
-					#play_game()
-					self.connect_to_server()
-			elif menu_option == "2":
-					#play_tutorial()
-					self.tutorial_demo()
-			elif menu_option == '3':
-					#game instructions
-					self.display_instructions()
-			elif menu_option == '4':
-					#about the game
-					self.display_description()
-			elif menu_option == '5':
-					#quit game
-					menu_loop = False
-			else:
-					print('\n Please choose a number.\n')
+    def initialize(self):
+        self.deck.shuffle()
+
+        for p_no in range(self.max_players):
+            for _ in range(4):
+                self.players[p_no].add_card(self.deck.deal())
+
+    def show_all_cards(self):
+        for p_no in range(self.max_players):
+            self.players[p_no].show_cards()
+
+    def set_winner(self, player):
+        self.winner = player
 
 
-	def display_instructions(self):
-		print("\n -----------------------------------------------------------\n                     1-2-3 Pass Game\n Instructions: \n Each player will be dealt with 4 cards. Players will pass \n one card to their right until one of them gets four of a \n kind. The player who first gets a four of a kind will be \n declared the winner.\n\n -----------------------------------------------------------\n")
-		input(" Enter any key to continue...")
+server = address
+port = 5555
 
-	def display_description(self):
-		print("\n -----------------------------------------------------------\n                     1-2-3 Pass Game\n About the Game: \n This program is created by Amherstia S. Doctor in order to \n complete the requirements for \n CMSC 137 Data Communications and Networking. \n -----------------------------------------------------------\n")
-		input(" Enter any key to continue...")
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-	def tutorial_demo(self):
-		tutorial_loop = True
-		while tutorial_loop:
-			print("-------------Welcome to the 1-2-3 Pass Tutorial-------------")
-			print("1) To start, you will be given 4 random cards, like what you see below")
-			DEMO_CARDS = (Card("1S"), Card("1H"), Card("1D"), Card("1C"), Card("3H"), Card("13K"))
-			print("Card List: ")
-			print('┌───────┐	┌───────┐	┌───────┐	┌───────┐')
-			print(f'| {DEMO_CARDS[0].value:<2}    |	| {DEMO_CARDS[1].value:<2}    |	| {DEMO_CARDS[2].value:<2}    |	| {DEMO_CARDS[5].value:<2}    |')
-			print('|       |	|       |	|       |	|       |')
-			print(f'|   {DEMO_CARDS[0].suit}   |	|   {DEMO_CARDS[1].suit}   |	|   {DEMO_CARDS[2].suit}   |	|   {DEMO_CARDS[5].suit}   |')
-			print('|       |	|       |	|       |	|       |')
-			print(f'|    {DEMO_CARDS[0].value:>2} |	|    {DEMO_CARDS[1].value:>2} |	|    {DEMO_CARDS[2].value:>2} |	|    {DEMO_CARDS[5].value:>2} |')
-			print('└───────┘	└───────┘	└───────┘	└───────┘')
-			print('    1    	    2    	    3    	    4    ')
-			tutorial_option = input('\nEnter 1 to continue, 2 to exit to menu: ')
+try:
+    s.bind((server, port))
+except socket.error as e:
+    str(e)
 
-			if tutorial_option == '1':
-				print("Now we move onto passing cards! \nTo pass a card, simply type in the number corresponding said card.")
-				print("Card List: ")
-				print('┌───────┐	┌───────┐	┌───────┐	┌───────┐')
-				print(f'| {DEMO_CARDS[0].value:<2}    |	| {DEMO_CARDS[1].value:<2}    |	| {DEMO_CARDS[2].value:<2}    |	| {DEMO_CARDS[5].value:<2}    |')
-				print('|       |	|       |	|       |	|       |')
-				print(f'|   {DEMO_CARDS[0].suit}   |	|   {DEMO_CARDS[1].suit}   |	|   {DEMO_CARDS[2].suit}   |	|   {DEMO_CARDS[5].suit}   |')
-				print('|       |	|       |	|       |	|       |')
-				print(f'|    {DEMO_CARDS[0].value:>2} |	|    {DEMO_CARDS[1].value:>2} |	|    {DEMO_CARDS[2].value:>2} |	|    {DEMO_CARDS[5].value:>2} |')
-				print('└───────┘	└───────┘	└───────┘	└───────┘')
-				print('    1    	    2    	    3    	    4    ')
-				pass_option = input("For example, let us pass the King of Spades, so press 4 to pass: ")
+s.listen(n_players)
+print("Server Started, Waiting for connection")
+g = Game(n_players)
+g.initialize()
 
-				if pass_option == '4':
-					print("Card List: ")
-					print('┌───────┐	┌───────┐	┌───────┐	┌───────┐')
-					print(f'| {DEMO_CARDS[0].value:<2}    |	| {DEMO_CARDS[1].value:<2}    |	| {DEMO_CARDS[2].value:<2}    |	| {DEMO_CARDS[4].value:<2}    |')
-					print('|       |	|       |	|       |	|       |')
-					print(f'|   {DEMO_CARDS[0].suit}   |	|   {DEMO_CARDS[1].suit}   |	|   {DEMO_CARDS[2].suit}   |	|   {DEMO_CARDS[4].suit}   |')
-					print('|       |	|       |	|       |	|       |')
-					print(f'|    {DEMO_CARDS[0].value:>2} |	|    {DEMO_CARDS[1].value:>2} |	|    {DEMO_CARDS[2].value:>2} |	|    {DEMO_CARDS[4].value:>2} |')
-					print('└───────┘	└───────┘	└───────┘	└───────┘')
-					print('    1    	    2    	    3    	    4    ')
-					print("Great! We passed the card! And we received a different card of 3 of Hearts!")
-					pass2_option = input("But we need a full suit to win the game so we shall pass a card again. Type in 4: ")
 
-					if pass2_option == '4':
-						print("Card List: ")
-						print('┌───────┐	┌───────┐	┌───────┐	┌───────┐')
-						print(f'| {DEMO_CARDS[0].value:<2}    |	| {DEMO_CARDS[1].value:<2}    |	| {DEMO_CARDS[2].value:<2}    |	| {DEMO_CARDS[3].value:<2}    |')
-						print('|       |	|       |	|       |	|       |')
-						print(f'|   {DEMO_CARDS[0].suit}   |	|   {DEMO_CARDS[1].suit}   |	|   {DEMO_CARDS[2].suit}   |	|   {DEMO_CARDS[3].suit}   |')
-						print('|       |	|       |	|       |	|       |')
-						print(f'|    {DEMO_CARDS[0].value:>2} |	|    {DEMO_CARDS[1].value:>2} |	|    {DEMO_CARDS[2].value:>2} |	|    {DEMO_CARDS[3].value:>2} |')
-						print('└───────┘	└───────┘	└───────┘	└───────┘')
-						print('    1    	    2    	    3    	    4    ')
-						print("We passed the card and received a 1 of Clubs!")
-						back_option = input("You have won the game! Please type in 1 to go back menu: ")
+def signal_pass():
+    c = 0
+    while c < 3:
+        c += 1
+        print(c, end=" ")
+        time.sleep(1)
+    print("Pass!")
+    time.sleep(1)
 
-						if back_option == '1':
-							break
-						else:
-							print("\nPlease type 1!\n")
-					else:
-						print("\nPlease type in 4!")
-				else:
-					print('\nPlease type in 4!\n')
-			elif tutorial_option == '2':
-				break
-			else:
-				print("\nPlease input an option!\n")
 
-	def connect_to_server(self):
-		HOST = input(" Enter IP address of server: ")
-		# HOST = "192.168.8.101"
-		PORT = int(input(" Enter port number: "))
-		# PORT = 8081
+def threaded_client(conn, p_no):
+    conn.send(pickle.dumps([g.players[p_no].player_id, g.players[p_no].cards]))
+    while True:
+        try:
+            data = pickle.loads(conn.recv(2048))
+            player = [g.players[p_no].player_id, g.players[p_no].cards, g.pass_count, g.max_players, g.winner]
 
-		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		try:
-			s.connect((HOST,PORT))
-		except:
-			print(f"\n Server in {HOST}:{PORT} not yet started!\n")
-			input(" Enter any key to return to menu...")
-			return
-		name = input(" Enter your name: ")
-		s.send(name.encode('utf-8'))
-		self.start_game(s)
-	def start_game(self,s):
-		global CARDS, isEND, isWIN
-		CARDS = []
-		isEND = False
-		isWIN = False
-		while True:
-			buf = b''
-			while len(buf) < 4:
-				buf += s.recv(4-len(buf))
-			length = struct.unpack('!I', buf)[0]
-			data = pickle.loads(s.recv(length))
-			if(isinstance(data,list)):
-				CARDS = data
-			else:
-				if(data == "WIN"):
-					isWIN = True
-				elif(data == "LOSE"):
-					isWIN = False
-				buf = b''
-				while len(buf) < 4:
-					buf += s.recv(4-len(buf))
-				length = struct.unpack('!I', buf)[0]
-				CARDS = pickle.loads(s.recv(length))
-				isEND = True
+            if not data:
+                print("Player", g.players[p_no].player_id + 1, "put his/her hand on the table!")
+                g.table_count += 1
+            elif data == "wait":
+                print("Waiting for other players to pick a card")
+                g.pass_count += 1
+                time.sleep(5)
+            elif data == "pass":
+                signal_pass()
+                g.show_all_cards()
+                g.pass_count = 0
+                print("End of turn, Waiting for players to pick a card")
+            elif data == "win":
+                for p in range(g.max_players):
+                    if g.players[p].win():
+                        g.winner = p
+                player = [p_no, g.players[p_no].cards, g.pass_count, g.max_players, g.winner]
+            else:
+                card_no = int(data)
+                passed_card = g.players[p_no].pass_card(card_no)
+                print("Player", p_no + 1, "picked", passed_card)
+                if p_no < g.max_players - 1:
+                    print("Player", p_no + 2, "will receive", passed_card)
+                    g.players[p_no + 1].add_card(passed_card)
+                else:
+                    print("Player 1 will receive", passed_card)
+                    g.players[0].add_card(passed_card)
 
-			if len(CARDS) == 4:
-				try:
-					os.system('clear')
-				except:
-					os.system('cls')
+            if g.winner >= 0 and g.table_count == g.max_players:
+                print("Player", g.winner + 1, "wins!")
+                print("Player", g.players[p_no].player_id + 1, "lose!")
+                print("End game, Restart server and client to play again")
+            conn.sendall(pickle.dumps(player))
 
-				for card in CARDS:
-					card = CARDS.pop(0)
-					CARDS.append(Card(card))
+        except:
+            break
 
-				print('┌───────┐	┌───────┐	┌───────┐	┌───────┐')
-				print(f'| {CARDS[0].value:<2}    |	| {CARDS[1].value:<2}    |	| {CARDS[2].value:<2}    |	| {CARDS[3].value:<2}    |')
-				print('|       |	|       |	|       |	|       |')
-				print(f'|   {CARDS[0].suit}   |	|   {CARDS[1].suit}   |	|   {CARDS[2].suit}   |	|   {CARDS[3].suit}   |')
-				print('|       |	|       |	|       |	|       |')
-				print(f'|    {CARDS[0].value:>2} |	|    {CARDS[1].value:>2} |	|    {CARDS[2].value:>2} |	|    {CARDS[3].value:>2} |')
-				print('└───────┘	└───────┘	└───────┘	└───────┘')
-				print('    1    	    2    	    3    	    4    ')
+    conn.close()
 
-				if(isEND):
-					if(isWIN):
-						input(" You got four-of-a-kind! Enter any key quickly...")
-						break
-					else:
-						input(" Another player has won. Enter any key to continue...")
-						break
-				while True:
-					try:
-						index = int(input("Enter number of card you wish to pass: "))
-						while(index > 4):
-							print("\nInput not valid!\n")
-							index = int(input("Enter number of card you wish to pass: "))
-						break
-					except:
-						print("\nInput not valid!\n")
 
-				cardToPass = str(index-1)
-				s.send(cardToPass.encode('utf-8'))
-		buf = b''
-		while len(buf) < 4:
-			buf += s.recv(4-len(buf))
-		length = struct.unpack('!I', buf)[0]
-		scores = pickle.loads(s.recv(length))
-		print("==============SCOREBOARD=============")
-		for name, val in scores.items():
-			print(f"||        {name} =  {val}	    	||")
-		print("=====================================")
-		while True:
-			try:
-				print("Do you want to play again? ")
-				choice = int(input(" [1] Yes or [2] No  >>"))
-				break
-			except:
-				print("\nInput not valid!\n")
-		if(choice == 1):
-			print("Waiting for other players...")
-			s.send(b'Y')
-			if(s.recv(1024).decode('utf-8') == 'N'):
-				print("Goodbye")
-			else:
-				self.start_game(s)
-		elif(choice == 2):
-			print("Goodbye")
-			s.send(b'N')
-		s.close()
+current_player = 0
+while True:
+    conn, addr = s.accept()
+    print("Player", current_player + 1, "connected to:", addr)
 
-game = Game()
-game.main()
+    start_new_thread(threaded_client, (conn, current_player))
+    current_player += 1
+
+    if current_player == g.max_players:
+        print("All players are connected, Initializing Game")
+        g.show_all_cards()
+        print("Waiting for players to pick a card")
+    else:
+        print("Waiting for other players to connect")
